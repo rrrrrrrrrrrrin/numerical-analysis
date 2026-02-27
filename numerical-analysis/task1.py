@@ -44,7 +44,7 @@ def sq(x, e=10**-6/2.25, stop=300):
 print("x, z_precise, z_approximate, |z_error|")
 
 for i in range(11):
-    x = np.float64(0.5 + 0.01*i)
+    x = round(np.float64(0.5 + 0.01*i), 2)
 
     # precise
     v = math.sqrt(x)
