@@ -43,7 +43,7 @@ def LU_decomposition_partial_pivot(A):
     return P, L, U, permut
 
 # Define matrices
-n = rnd.randint(0, 100)
+n = rnd.randint(0, 10)
 A = np.random.uniform(0, high=10.0, size=(n, n))
 P, L, U, permut = LU_decomposition_partial_pivot(A)
 
@@ -95,3 +95,30 @@ b = np.random.randn(n)
 x = solve_LU(P, L, U, b)
 print(f"  b) x = {x}\n"
       f"  Ax = b: {np.allclose(A @ x, b)}")
+
+# c) Find inverse matrix for A
+E = np.eye(n)
+A_inv = np.zeros((n, n))
+def find_inv(P, L, U):
+    for i in range(n):
+        Pe = P @ E[0:n, i]  # P * i-th column in E
+        y1 = forward_substitution(L, Pe)
+        x1 = backward_substitution(U, y1)
+        A_inv[0:n, i] = x1
+
+    return A_inv
+
+print(f"  c) A_inv (A^-1): \n{find_inv(P, L, U)}\n"
+      f"  A_inv * A = A * A_inv = E: {np.allclose(A @ A_inv, E)}")
+
+# d) Calculate the condition number of A (for an arbitrary norm)
+def matrix_norm_1(A):
+    max_sum = 0  # arbitrary norm: max sum of elems in an i-th row (||A||_1 norm)
+    for i in range(n):
+        col_sum = sum(abs(A[:, i]))
+        max_sum = col_sum if col_sum > max_sum else max_sum
+    return max_sum
+
+print(f"  d) Condition number (np.linalg.norm(M, 1)):\n"
+      f"  {np.linalg.norm(A, 1) * np.linalg.norm(A_inv, 1)}\n"
+      f"  Calculated condition number: {matrix_norm_1(A) * matrix_norm_1(A_inv)}")
