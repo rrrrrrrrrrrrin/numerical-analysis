@@ -8,7 +8,7 @@ import math
 def LU_decomposition_partial_pivot(A):
     n = len(A)
     P = np.eye(n)  # permutation matrix; fixes bad pivots (near zero/zero) by row swaps
-    L = np.eye(n)  # lower triangular; stores multipliers
+    L = np.eye(n)  # lower-triangular; stores multipliers
     U = A.copy()  # upper-triangular; the result of Gaussian elimination (simplified A)
 
     permut = 0
@@ -98,7 +98,7 @@ def solve_LU(P, L, U, b):
 b = np.random.randn(n)
 x = solve_LU(P, L, U, b)
 print(f"b) x = {x}\n\n"
-      f"   Ax = b: {np.allclose(A @ x, b)}\n")
+      f"   Ax = b (LU = A): {np.allclose(A @ x, b)}\n")
 
 # ======================================= c) =============================================
 # Find inverse matrix for A: b = e_i => L(Ux_i) = Pe_i for each column x_i of A_inv
@@ -254,8 +254,85 @@ print(f"Rank: {rank}, rank of augmented S matrix: {rank_augmented}\n")
 
 sign1 = 1 if permut % 2==0 else -1  # number of swaps
 detU1 = np.prod(np.diag(U1))  # bcs U is upper-triangular
-print(f"SIngular matrix: det(A) = 0? {np.allclose(sign1*detU1, 0, 1e-12)}\n"
+print(f"Singular matrix: det(A) = 0? {np.allclose(sign1*detU1, 0, 1e-12)}\n"
       f"check via np.linalg.det(S): {np.allclose(np.linalg.det(S), 0, 1e-12)}\n")
 
 # ============================================= 3. ==========================================
+
+# Householder reflections to make QR-decomposition
+#
+# Zero out everything below the main diag in a column
+# v defines a reflection
+#
+# The reflector is H = I (identity matrix) - 2 * v * v^T (with a normalized v)
+# HR -> R, QH -> Q because QR by Householder repeatedly applies reflectors
+# The H matrix has the property hat it reflects x onto the first coordinate axis:
+#       Hx = alpha * e1 = [alpha, 0, ..., 0]^T (it is a column)
+# (that's why all entries below the diagonal become zero)
+def QR_Householder(A):
+    n = len(A)
+    Q = np.eye(n)  # orthogonal matrix we accumulate, so that A = QR
+                   # (remember transformations that made A into R)
+    R = A.copy()  # upper-triangular: simplified A
+
+    for i in range(n):  # for each column
+        # 1) Extract the column vector from i to n row, that we need to clean
+        #    Take the part below main diag, including it
+        x = R[i:n, i]
+
+        # 2) Build the Householder reflector H
+        #    v = +- (x - alpha*e1) / ||(x - alpha*e1)||
+        #    e1 = [1, 0, ..., 0]^T (it is a column), alpha = -sgn(x) * ||x||
+        e1 = np.zeros_like(x)
+        e1[0] = 1.0
+
+        alpha = np.linalg.norm(x)
+        if x[0] >= 0:
+            alpha = -alpha  # to avoid catastrophic cancellation in calculation of v
+
+        v = x - alpha * e1
+        v = v / np.linalg.norm(v)  # normalize v (it's a unit vector)
+
+        # 3) Apply reflector H to R to zero out entries below the diagonal in column i
+        #    Only apply to submatrix to avoid touching previous columns (i:n)
+        #    Matrix R is being triangularized (apply the reflector) from the left HR -> R
+        #    HR -> R changes rows of the active block
+        #    R = HR = (I - 2 * v * v^T)R = R - 2 * v * (R * v^T)
+        R[i:n, i:n] -= 2 * np.outer(v, v @ R[i:n, i:n])
+
+        # 4) Accumulate Q: multiply all reflectors together to form Q
+        #
+        #    Apply only to relevant columns (i:n)
+        #    (but all rows bcs multiplying on the right changes cols
+        #    and every row participates in those cols)
+        #
+        #    QH -> Q changes columns of the active block
+        #
+        #    Apply the reflector from the right QH -> Q
+        #    Q = QH = Q(I - 2 * v * v^T) = Q - 2 * (Q * v) * v^T
+        #
+        #    Q[:, i:] is a matrix [n x n-i], v is a vector [n-i] =>
+        #    Q @ v's result is a column vector [n] w
+        #    outer product of two vectors w and v is a matrix [n x n-i]
+        #
+        #    Q[:, i:] @ v projects columns of Q onto direction v (how much each row aligns with that direction)
+        #    np.outer() spreads that projection back across columns (rebuild matrix from that alignment)
+        #    Subtraction reflects those columns across hyperplane
+        Q[0:n, i:n] -= 2 * np.outer(Q[0:n, i:n] @ v, v)
+
+    return Q, R
+
+Q, R = QR_Householder(A)
+print(f"LU = PA: {np.allclose(L@U, P@A)}")
+print(f"QR = A: {np.allclose(Q@R, A)}\n")
+
+# Bcs Q is orthogonal and R is upper-triangular:
+# Ax = b => Q(Rx) = b => Rx = Q^T * b
+def solve_QR(Q, R, b):
+    y = Q.T @ b
+    x = backward_substitution(R, y)
+    return x
+
+print(f"x = {x}\n\n"
+      f"Ax = b (QR = A): {np.allclose(A @ x, b)}\n")
 
