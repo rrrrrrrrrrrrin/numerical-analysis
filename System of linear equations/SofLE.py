@@ -3,6 +3,7 @@ import random as rnd
 import math
 
 
+# ======================================= 1. =======================================
 # LU-decomposition via partial pivot (row)
 def LU_decomposition_partial_pivot(A):
     n = len(A)
@@ -38,28 +39,31 @@ def LU_decomposition_partial_pivot(A):
         for j in range(i+1, n):  # for each row j > i
             # How much of row i is subtracted from row j:
             L[j,i] = U[j,i] / U[i,i]  # store multiplier
-            U[j, i:n] -= L[j, i] * U[i, i:n]  # U[j, 0] = 0 (U's j row and i column elem is eliminated/equals 0)
+            U[j, i:n] -= L[j, i] * U[i, i:n]  # U[j, i] = 0 (U's j-th row and i-th column elem is eliminated/equals 0)
+            U[j, i] = 0.0
 
     return P, L, U, permut
 
 # Define matrices
-n = rnd.randint(0, 10)
+n = rnd.randint(1, 10)
 A = np.random.uniform(0, high=10.0, size=(n, n))
 P, L, U, permut = LU_decomposition_partial_pivot(A)
 
-# 1. LU = PA
+# LU = PA
 # Matrix multiplication @, np.allclose() to approximate float comparisons
 print(f"1. LU = PA: {np.allclose(L@U, P@A)}")
 
-# a) det(A) if LU = PA via partial pivot
+# ========================================= a) ===========================================
+# det(A) if LU = PA via partial pivot
 sign = 1 if permut % 2==0 else -1  # number of swaps
 detU = np.prod(np.diag(U))  # bcs U is upper-triangular
-print(f"  a) det(A) = {sign*detU},\n     "
-      f"check via np.linalg.det(A): {np.linalg.det(A)}\n")
+print(f"a) det(A) = {sign*detU},\n"
+      f"   check via np.linalg.det(A): {np.linalg.det(A)}\n")
 
-# b) Ax = b |*P
-#    PAx = Pb (PA = LU) =>
-#    L(Ux) = Pb
+# ========================================= b) ==========================================
+# Ax = b |*P
+# PAx = Pb (PA = LU) =>
+# L(Ux) = Pb
 # Let: Ux = y, Ly = Pb
 
 def forward_substitution(L, Pb):
@@ -93,10 +97,12 @@ def solve_LU(P, L, U, b):
 
 b = np.random.randn(n)
 x = solve_LU(P, L, U, b)
-print(f"  b) x = {x}\n"
-      f"  Ax = b: {np.allclose(A @ x, b)}")
+print(f"b) x = {x}\n\n"
+      f"   Ax = b: {np.allclose(A @ x, b)}\n")
 
-# c) Find inverse matrix for A
+# ======================================= c) =============================================
+# Find inverse matrix for A: b = e_i => L(Ux_i) = Pe_i for each column x_i of A_inv
+# Therefore, to find inverse matrix, solve one system for each basis vector
 E = np.eye(n)
 A_inv = np.zeros((n, n))
 def find_inv(P, L, U):
@@ -108,10 +114,11 @@ def find_inv(P, L, U):
 
     return A_inv
 
-print(f"  c) A_inv (A^-1): \n{find_inv(P, L, U)}\n"
-      f"  A_inv * A = A * A_inv = E: {np.allclose(A @ A_inv, E)}")
+print(f"c) A_inv (A^-1): \n{find_inv(P, L, U)}\n\n"
+      f"   A_inv * A = A * A_inv = E: {np.allclose(A @ A_inv, E)}\n")
 
-# d) Calculate the condition number of A (for an arbitrary norm)
+# ======================================= d) =========================================
+# Calculate the condition number of A (for an arbitrary norm)
 def matrix_norm_1(A):
     max_sum = 0  # arbitrary norm: max sum of elems in an i-th row (||A||_1 norm)
     for i in range(n):
@@ -119,6 +126,136 @@ def matrix_norm_1(A):
         max_sum = col_sum if col_sum > max_sum else max_sum
     return max_sum
 
-print(f"  d) Condition number (np.linalg.norm(M, 1)):\n"
-      f"  {np.linalg.norm(A, 1) * np.linalg.norm(A_inv, 1)}\n"
-      f"  Calculated condition number: {matrix_norm_1(A) * matrix_norm_1(A_inv)}")
+print(f"d) Condition number (np.linalg.norm(M, 1)): {np.linalg.norm(A, 1) * np.linalg.norm(A_inv, 1)}\n"
+      f"   Calculated condition number: {matrix_norm_1(A) * matrix_norm_1(A_inv)}\n")
+
+
+# ============================================= 2. ==========================================
+# Find the rank of degenerate (singular) matrices
+# For a singular matrix we may reach a step where there is no usable pivot left in the current column
+# It can be either because: the current column is all zeros below the current row, or
+#                           after elimination the remaining submatrix is all zeros
+#
+# For partial pivoting: move to the next column remaining in the same row
+#
+# The number of successful pivots is the rank
+#
+# Main idea: have separate indices for rows and columns
+def LU_decompose_for_singular(A):
+    n = len(A)
+    P = np.eye(n)
+    L = np.eye(n)
+    U = A.copy()
+
+    permut = 0
+
+    rank = 0
+    pivot_cols = []
+
+    row_idx = 0
+    col_idx = 0
+
+    while row_idx < n and col_idx < n:
+        # 1) Find pivot row index in current column, below current row
+        column_i = U[row_idx:n, col_idx]
+
+        # np.argmax() returns index of max elem in column
+        pivot = np.argmax(abs(column_i)) + row_idx  # absolute row index
+
+        # 2) If column is all zeros, skip it and move on to the next one: col_idx += 1
+        if abs(U[pivot, col_idx]) < 1e-12:
+            col_idx += 1
+            continue  # Column is already zeroed
+
+        # 3) If pivot row != current row (indices),
+        #    swap rows in U, P and in the already computed part of L (after swap in U) (columns 0:col_idx)
+        if pivot != row_idx:
+            U[[row_idx, pivot], 0:n] = U[[pivot, row_idx], 0:n]
+            P[[row_idx, pivot], 0:n] = P[[pivot, row_idx], 0:n]
+            permut += 1
+            L[[row_idx, pivot], 0:row_idx] = L[[pivot, row_idx], 0:row_idx]  # swap prev multipliers
+
+        # After swapping the row pivot elem is U[i,i]. Columns < i are zero after swaps
+
+        # 4) Compute multipliers and eliminate below pivot in U (elems in column i > n and rows j > i)
+        for j in range(row_idx+1, n):  # for each row j > row_idx
+            # How much of row i is subtracted from row j:
+
+            if abs(U[j, col_idx]) < 1e-12:  # elem is almost zero
+                continue
+
+            L[j, row_idx] = U[j,col_idx] / U[row_idx, col_idx]  # store multiplier
+            U[j, col_idx:n] -= L[j, row_idx] * U[row_idx, col_idx:n]  # U[j, col_idx] = 0 (or close to zero, so =>)
+            U[j, col_idx] = 0.0
+
+        rank += 1
+        pivot_cols.append(col_idx)
+        row_idx += 1
+        col_idx += 1
+
+    return P, L, U, permut, rank, pivot_cols
+
+def backward_substitution_singular(U, y, pivot_cols):
+    n = U.shape[1]  # cols
+    x = np.zeros(n)
+
+    # Consistency check for a system Ax = b
+    # Provide any solution if the solution exists
+    for i in range(U.shape[0]):  # rows
+        # 0x1 + 0x2 + 0x3 = non zero y[i] => no solution
+        if np.allclose(U[i, 0:n], 0, 1e-12) and not np.isclose(y[i], 0, 1e-12):
+            return None  # no solution
+
+    # The i-th equation row-wise: u_ii * x_i + [sum (j=i+1 in range(n)) u_ij * x_j] = y_i
+    #
+    # Solve only pivot variables (cols indices from pivot cols)
+    #
+    # Free variables stay 0
+    # (ex., 0x1 + 0x2 + 0x3 = zero y[i] => third row is all zeros => x3 = 0), skip 'em
+
+    for k in reversed(range(len(pivot_cols))):
+        col_idx = pivot_cols[k]
+        x[col_idx] = (y[k] - np.dot(U[k, col_idx + 1:n], x[k + 1:n])) / U[k, col_idx]
+
+    return x
+
+def solve_LU_singular(P, L, U, b, pivot_cols):
+    Pb = P @ b
+    y = forward_substitution(L, Pb)
+    x = backward_substitution_singular(U, y, pivot_cols)
+    return x
+
+def generate_singular(m, k):
+    # Multiply m x k matrix by k x m where m > k, the resulting matrix m x m is singular
+
+    A = np.random.uniform(0, high=10.0, size=(n, k))
+    B = np.random.uniform(0, high=10.0, size=(k, n))
+
+    return A @ B  # singular matrix
+
+
+m = rnd.randint(11, 20)
+k = rnd.randint(1, 10)
+S = generate_singular(m, k)
+
+P1, L1, U1, permut1, rank, pivot_cols = LU_decompose_for_singular(S)
+
+b1 = np.random.randn(n)
+x1 = solve_LU_singular(P1, L1, U1, b1, pivot_cols)
+
+print(f"\n2. type(x1): {type(x1)}, x1 = {x1}\n")
+if type(x1) != np.ndarray:
+    print("No solution: x1 does not exist (inconsistent system)\n")
+else:
+    print(f"Sx1 = b1: {np.allclose(S @ x1, b1)}\n")
+
+rank_augmented = np.linalg.matrix_rank(S)
+print(f"Rank: {rank}, rank of augmented S matrix: {rank_augmented}\n")
+
+sign1 = 1 if permut % 2==0 else -1  # number of swaps
+detU1 = np.prod(np.diag(U1))  # bcs U is upper-triangular
+print(f"SIngular matrix: det(A) = 0? {np.allclose(sign1*detU1, 0, 1e-12)}\n"
+      f"check via np.linalg.det(S): {np.allclose(np.linalg.det(S), 0, 1e-12)}\n")
+
+# ============================================= 3. ==========================================
+
