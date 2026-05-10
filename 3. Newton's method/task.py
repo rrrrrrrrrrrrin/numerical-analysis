@@ -6,6 +6,8 @@ import time
 #    Count execution time
 
 # System F(x) = 0
+# F(x) = [f_1(x_1, ..., x_10), ..., f_10(x_1, ..., x_10)],
+# where f_i is nonlinear equation
 def F(x):
     x1, x2, x3, x4, x5, x6, x7, x8, x9, x10 = x
     return np.array([
@@ -21,11 +23,13 @@ def F(x):
         x10 * x1 + x9 * x2 - x8 * x3 + np.sin(x4 + x5 + x6) * x7 - 0.78238095238095238096
     ], dtype=float)
 
+# Jacobian matrix J(x)[10 x 10] = [df_i/dx_j] (partial derivatives)
 def J(x):
     x1, x2, x3, x4, x5, x6, x7, x8, x9, x10 = x
     A = np.zeros((10, 10), dtype=float)
 
-    A[0, 0] = -np.sin(x2 * x1) * x2
+    # df_1/dx_j, j=[1, 10]
+    A[0, 0] = -np.sin(x2 * x1) * x2  # df_1/dx_1
     A[0, 1] = -np.sin(x2 * x1) * x1
     A[0, 2] = 3 * np.exp(-3 * x3)
     A[0, 3] = x5**2
@@ -206,6 +210,15 @@ def solve_LU(P, L, U, b):
     x , ops2 = backward_substitution(U, y)
     return x, ops1 + ops2
 
+# Suppose we already have an approximation x_k
+# Near this point, approximate F(x) by its 1st-order Taylor expansion:
+# F(x_k + dx) =~ F(x_k) + J(x_k) * dx
+#
+# We want next approximation x_(k+1) to satisfy F(x_(x+1)) =~ 0
+# Substitute x_(k+1) = x_k + dx_k
+# Therefore F(x_k) + J(x_k) * dx_k = 0
+# So at each iteration we solve the linear system J(x_k) * dx_k = -F(x_k)
+
 # Newton's method
 def newton_method(x0, eps=1e-8, max_iter=50):
     x = x0.copy().astype(float)
@@ -227,10 +240,12 @@ def newton_method(x0, eps=1e-8, max_iter=50):
         if np.linalg.norm(Fx, ord=np.inf) < eps:
             break
 
+        # J(x_k) * dx_k = -F(x_k) is solved using LU-decomposition: PA = LU
+        # Ax = b; A = J(x_k), x = dx_k b = -Fx_k
         P, L, U, permut, ops_LU = LU_decomposition_partial_pivot(J(x))
         dx, ops_solve = solve_LU(P, L, U, -Fx)
 
-        x += dx
+        x += dx  # x_(k+1) = x_k + dx_k
         ops_total += ops_LU + ops_solve
         iters += 1
 
