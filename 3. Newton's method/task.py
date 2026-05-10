@@ -222,7 +222,7 @@ def solve_LU(P, L, U, b):
 # 1st-order: F(x_k + dx) =~ F(x_k) + F'(x_k)dx
 #
 # Suppose x is a vector. Then F'(x_k) becomes a Jacobian matrix J(x_k)
-# Final form: F(x_k + dx) =~ F(x_k) + J(x_k) * dx
+# Final form: F(x_k + dx) =~ F(x_k) + J(x_k) * dx  (IT'S Newton's method)
 #
 # We want next approximation x_(k+1) to satisfy F(x_(x+1)) =~ 0
 # Substitute x_(k+1) = x_k + dx_k
