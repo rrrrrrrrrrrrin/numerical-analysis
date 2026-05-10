@@ -27,7 +27,7 @@ import matplotlib.pyplot as plt
 #    p — оценка порядка сходимости по Эйткену
 #    S' = S + R — уточнение решения по Ричардсону
 #    E' — точная относительная погрешность S'
-#    p' — оценка порядка сходимости по Эйткуну для S'
+#    p' — оценка порядка сходимости по Эйткену для S'
 #    pr — наклон графика относительных погрешностей R
 
 
@@ -39,6 +39,7 @@ def f(x):
 
 # e^x dx, [0, 1] = e - 1
 I = np.e - 1
+rtol = 1e-10
 
 # 2) Составная формула среднего прямоугольника
 def midpoint_rule(f, a, b, N):
@@ -65,7 +66,7 @@ def simpson_from_trapezoids(T_prev, T_new):
     return (4 * T_new - T_prev) / 3
 
 # 5) Оценка порядка сходимости по Эйткену p
-def aitken_method(S1, S2, S3):
+def aitken(S1, S2, S3):
     numerator = abs(S3 - S2)
     denominator = abs(S2 - S1)
 
@@ -80,19 +81,26 @@ def aitken_method(S1, S2, S3):
 def table_midpoint(rtol=1e-10):
     rows = []
     S_vals = []
-    Sr_vals = []
+    S_rich_vals = []
 
-    N = 1
+    N = abs(b - a)  # начальный шаг это длина отрезка [a, b]
     while True:
-        h = (b - a) / N
-        S = midpoint_rule(f, a, b, N)
-        S_vals.append(S)
+        h = (b - a) / N  # h — длина шага
+        S = midpoint_rule(f, a, b, N)  # S — приближённое значение интеграла
+        S_vals.append(S)  # сохраняем S для дальнейших вычислений
+
+        #  R — оценка относительной погрешности по Рунге
+        #  p — оценка порядка сходимости по Эйткену
+        #  S' = S + R — уточнение решения по Ричардсону
+        #  E' — точная относительная погрешность S'
+        #  p' — оценка порядка сходимости по Эйткуну для S'
+        #  pr — наклон графика относительных погрешностей R
 
         row = {
             "N": N,
             "h": h,
             "S": S,
-            "E": abs(I - S) / abs(I),
+            "E": abs(I - S) / abs(I),  # E = |I - S|/|I|
             "R": np.nan,
             "p": np.nan,
             "S'": np.nan,
@@ -102,41 +110,61 @@ def table_midpoint(rtol=1e-10):
         }
 
         if len(S_vals) >= 2:
+            # Значение на предыдущей сетке
             S_prev = S_vals[-2]
-            delta = (S - S_prev) / (2**2 - 1)   # p = 2
+
+            # Оценка относительной погрешности R по Рунге
+            # R = (S(h) - S(h/2)) / (2^p - 1)
+            delta = (S - S_prev) / (2**2 - 1)  # p = 2
+
+            # Относительная ошибка
             R = abs(delta) / abs(S)
+
+            # Уточнение решения по Ричардсону
+            # S' = S + R
             S_rich = S + delta
 
             row["R"] = R
             row["S'"] = S_rich
-            row["E'"] = abs(I - S_rich) / abs(I)
-            Sr_vals.append(S_rich)
 
+            # E' — точная относительная погрешность S'
+            # E = |I - S'|/|I|
+            row["E'"] = abs(I - S_rich) / abs(I)
+
+            S_rich_vals.append(S_rich)  # сохраняем S' для дальнейших вычислений
+
+            # p — оценка порядка сходимости по Эйткену
             if len(S_vals) >= 3:
                 row["p"] = aitken(S_vals[-3], S_vals[-2], S_vals[-1])
 
-            if len(Sr_vals) >= 3:
-                row["p'"] = aitken(Sr_vals[-3], Sr_vals[-2], Sr_vals[-1])
+            # p' — оценка порядка сходимости по Эйткену для S'
+            if len(S_rich_vals) >= 3:
+                row["p'"] = aitken(S_rich_vals[-3], S_rich_vals[-2], S_rich_vals[-1])
 
+            # pr — наклон графика относительных погрешностей R
+            # pr = log_10(R) / log_10(R(h))
             if len(rows) >= 1 and rows[-1]["R"] > 0 and R > 0:
                 row["pr"] = (np.log10(R) - np.log10(rows[-1]["R"])) / (np.log10(h) - np.log10(rows[-1]["h"]))
 
         rows.append(row)
 
+        # Остановка: относительная погрешность по Рунге R < rtol
         if not np.isnan(row["R"]) and row["R"] < rtol:
             break
 
+        # Удваиваем число шагов
         N *= 2
 
     return pd.DataFrame(rows)
 
 # 7) Построение таблицы для метода трапеций
+#    При удвоении шага использовать значения S для предыдущего числа шагов
 def table_trapezoid(rtol=1e-10):
     rows = []
     S_vals = []
-    Sr_vals = []
+    S_rich_vals = []
 
-    N = 1
+    N = abs(b - a)
     h = b - a
     S = h * (f(a) + f(b)) / 2  # T_1
     S_vals.append(S)
@@ -159,7 +187,7 @@ def table_trapezoid(rtol=1e-10):
         N_new = 2 * N
         h_new = h / 2
         x_new = a + h * (np.arange(N) + 0.5)
-        S_new = 0.5 * S + h_new * np.sum(f(x_new))   # T_{2N}
+        S_new = 0.5 * S + h_new * np.sum(f(x_new))   # T_(2N)
 
         S_vals.append(S_new)
 
@@ -180,13 +208,13 @@ def table_trapezoid(rtol=1e-10):
             "pr": np.nan
         }
 
-        Sr_vals.append(S_rich)
+        S_rich_vals.append(S_rich)
 
         if len(S_vals) >= 3:
             row["p"] = aitken(S_vals[-3], S_vals[-2], S_vals[-1])
 
-        if len(Sr_vals) >= 3:
-            row["p'"] = aitken(Sr_vals[-3], Sr_vals[-2], Sr_vals[-1])
+        if len(S_rich_vals) >= 3:
+            row["p'"] = aitken(S_rich_vals[-3], S_rich_vals[-2], S_rich_vals[-1])
 
         if len(rows) >= 1 and rows[-1]["R"] > 0 and R > 0:
             row["pr"] = (np.log10(R) - np.log10(rows[-1]["R"])) / (np.log10(h_new) - np.log10(rows[-1]["h"]))
@@ -205,22 +233,23 @@ def table_trapezoid(rtol=1e-10):
 def table_simpson(rtol=1e-10):
     rows = []
     S_vals = []
-    Sr_vals = []
+    S_rich_vals = []
 
-    # Начинаем с N=2, потому что для Симпсона число шагов должно быть чётным
-    N = 2
+    # На каждый итерации кол-во шагов удваивается
+    # Для формулы Симпсона число шагов четное
+    N = abs(b - a)
+    if N % 2 != 0:
+        N *= 2
+
     h = (b - a) / N
 
-    # T_1
-    T_prev = (b - a) * (f(a) + f(b)) / 2
+    T_prev = (b - a) * (f(a) + f(b)) / 2  # T_1
 
-    # T_2
     x = np.linspace(a, b, N + 1)
     y = f(x)
-    T = h * (0.5 * y[0] + np.sum(y[1:-1]) + 0.5 * y[-1])
+    T = h * (0.5 * y[0] + np.sum(y[1:-1]) + 0.5 * y[-1])  # T_2
 
-    # S_2
-    S = simpson_from_trapezoids(T_prev, T)
+    S = simpson_from_trapezoids(T_prev, T)  # S_2
     S_vals.append(S)
 
     row = {
@@ -242,12 +271,12 @@ def table_simpson(rtol=1e-10):
         h_new = h / 2
 
         x_new = a + h * (np.arange(N) + 0.5)
-        T_new = 0.5 * T + h_new * np.sum(f(x_new))  # T_{2N}
-        S_new = simpson_from_trapezoids(T, T_new)    # S_{2N}
+        T_new = 0.5 * T + h_new * np.sum(f(x_new))  # T_(2N)
+        S_new = simpson_from_trapezoids(T, T_new)    # S_(2N)
 
         S_vals.append(S_new)
 
-        delta = (S_new - S) / (2**4 - 1)   # p = 4
+        delta = (S_new - S) / (2**4 - 1)  # p = 4
         R = abs(delta) / abs(S_new)
         S_rich = S_new + delta
 
@@ -263,13 +292,14 @@ def table_simpson(rtol=1e-10):
             "p'": np.nan,
             "pr": np.nan
         }
-        Sr_vals.append(S_rich)
+
+        S_rich_vals.append(S_rich)
 
         if len(S_vals) >= 3:
             row["p"] = aitken(S_vals[-3], S_vals[-2], S_vals[-1])
 
-        if len(Sr_vals) >= 3:
-            row["p'"] = aitken(Sr_vals[-3], Sr_vals[-2], Sr_vals[-1])
+        if len(S_rich_vals) >= 3:
+            row["p'"] = aitken(S_rich_vals[-3], S_rich_vals[-2], S_rich_vals[-1])
 
         if len(rows) >= 1 and rows[-1]["R"] > 0 and R > 0:
             row["pr"] = (np.log10(R) - np.log10(rows[-1]["R"])) / (np.log10(h_new) - np.log10(rows[-1]["h"]))
@@ -284,23 +314,22 @@ def table_simpson(rtol=1e-10):
     return pd.DataFrame(rows)
 
 
-# 9) Печать таблицы
+# 9) Вывод таблицы
 def print_table(df, title):
-    print("\n" + "=" * 90)
-    print(title)
-    print("=" * 90)
+    print(f'\n{title}')
 
-    out = df.copy()
-    out = out.replace({np.nan: ""})  # Nan -> пустая строка
-    pd.set_option("display.max_columns", None)
-    pd.set_option("display.width", 200)
-    print(out.to_string(index=False))
-
+    pd.set_option("display.float_format", "{:.12e}".format)
+    print(df)
 
 # График R(h) в двойной логарифмической шкале
 # (зависимость log_10(R) от log_10(h)) для каждой формулы
+# Наклон отрезков этого графика это и есть pr
+# Для сравнения привести график опорной прямой с наклоном p_vec (черным штрихом),
+# проходящей рядом с графиком зависимости:
+# для средних прямоугольников и трапеций p_vec = 2,
+# для Симпсона p_vec = 4
 #
-#
+# Прямая p_vec показывает теоретический порядок сходимости при малых h
 def plot_R(df, title, pbar):
     d = df.dropna(subset=["R", "h"]).copy()
     h = d["h"].to_numpy()
@@ -324,7 +353,7 @@ def plot_R(df, title, pbar):
     plt.legend()
     plt.show()
 
-
+# Для каждой квадратурной формулы строится своя таблица
 mid_df = table_midpoint()
 trap_df = table_trapezoid()
 simp_df = table_simpson()
@@ -338,18 +367,22 @@ plot_R(trap_df, "Трапеции: log10(R) от log10(h)", 2)
 plot_R(simp_df, "Симпсон: log10(R) от log10(h)", 4)
 
 # ========================================== 2 ============================================
+# Посчитать при N для которого |p - p_vec| < 0.05 * p_vec
+# оптимальное кол-во шагов N_opt для достижения точности rtol
+# N_opt должно быть больше предпоследнего, но меньше последнего N в таблице
+# Проверить, что расчет при N_opt дает нужную погрешность
 def find_nopt(method, pbar, df, rtol, N_min, N_max, even=False):
-    # 1) берём первую строку, где p уже близко к теоретическому
+    # 1) Берём первую строку, где p_vec уже близко к теоретическому
     good = df[(df["p"].notna()) & (abs(df["p"] - pbar) < 0.05 * pbar)]
     row = good.iloc[0]
 
-    # 2) оценка Nopt по Рунге
+    # 2) Оценка N_opt по Рунге
     N_est = int(np.ceil(row["N"] * (row["R"] / rtol) ** (1 / pbar)))
 
     if even and N_est % 2 != 0:
         N_est += 1
 
-    # 3) проверка и при необходимости увеличиваем N
+    # 3) Проверка; при необходимости увеличиваем N
     N = max(N_est, N_min)
     if even and N % 2 != 0:
         N += 1
@@ -376,7 +409,7 @@ N_used_tr, N_est_tr, Nopt_tr, E_tr = find_nopt(
 
 # Симпсон
 N_used_sim, N_est_sim, Nopt_sim, E_sim = find_nopt(
-    simpson_rule, 4, simp_df, rtol, 64, 128, even=True
+    simpson_from_trapezoids, 4, simp_df, rtol, 64, 128, even=True
 )
 
 print("Midpoint:", N_used_mid, N_est_mid, Nopt_mid, E_mid)
