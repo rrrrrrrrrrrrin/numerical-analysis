@@ -211,8 +211,18 @@ def solve_LU(P, L, U, b):
     return x, ops1 + ops2
 
 # Suppose we already have an approximation x_k
+#
 # Near this point, approximate F(x) by its 1st-order Taylor expansion:
-# F(x_k + dx) =~ F(x_k) + J(x_k) * dx
+# F(x) = F(x_k) + F'(x_k)(x-x_k) + 1/2 * (F''(x_k)(x-x_k)^2) + ...
+#
+# Replace: x = x_k + dx. Therefore (x - x_k) -> (x_k + dx - x_k) -> dx
+# => F(x_k + dx) = F(x_k) + F'(x_k)dx + 1/2 * (F''(x_k)dx^2) + ...
+#
+# Assume dx is very small; dx^2, dx^3, ... become negligible =>
+# 1st-order: F(x_k + dx) =~ F(x_k) + F'(x_k)dx
+#
+# Suppose x is a vector. Then F'(x_k) becomes a Jacobian matrix J(x_k)
+# Final form: F(x_k + dx) =~ F(x_k) + J(x_k) * dx
 #
 # We want next approximation x_(k+1) to satisfy F(x_(x+1)) =~ 0
 # Substitute x_(k+1) = x_k + dx_k
