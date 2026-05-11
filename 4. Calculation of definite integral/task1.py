@@ -13,8 +13,8 @@ import matplotlib.pyplot as plt
 # 1. Относительная погрешность rtol = 1e-10
 # Оценка погрешности по правилу Рунге
 #
-# 2. Начальный шаг это длина отрезка
-# На каждой итерации увеличивать число шагов вдвое
+# 2. Начальный шаг h_0 это длина отрезка
+# На каждой итерации увеличивать число шагов N вдвое
 #
 # I — точное значение интеграла
 # N — число шагов разбиения отрезка [a, b]
@@ -43,11 +43,12 @@ rtol = 1e-10
 
 # 2) Составная формула среднего прямоугольника
 def midpoint_rule(f, a, b, N):
-    h = (b - a) / N  # длина шага (подотрезка)
+    h = (b - a) / N  # длина шага (подотрезка); начальный шаг h_0 это длина отрезка
     x = a + h * (np.arange(N) + 0.5)  # середины отрезков
     return h * np.sum(f(x))  # формула интегрирования
 
 # 3) Составная формула трапеций
+#    Рекуррентная формула перехода от сетки N к 2N
 #    Использовать значения с предыдущей сетки
 #    Формула трапеции при удвоении числа шагов:
 #    T_(2N) = 1/2 * T_N + h_(2N) * sum f(new midpoints)
@@ -60,10 +61,27 @@ def trapezoidal_rule(T_prev, f, a, b, N_prev):
 
     return T_new
 
+# 3.1) Составная формула трапеций
+def trapezoidal_integral(f, a, b, N):
+    h = (b - a) / N
+    x = np.linspace(a, b, N + 1)
+    y = f(x)
+    return h * (0.5 * y[0] + np.sum(y[1:-1]) + 0.5 * y[-1])
+
 # 4) Составная формула Симпсона из формулы трапеций
 def simpson_from_trapezoids(T_prev, T_new):
     # S_(2N) = (4*T_(2N) - T_N)/3
     return (4 * T_new - T_prev) / 3
+
+# 4.1) Составная формула Симпсона
+def simpson_integral(f, a, b, N):
+    # Для формулы Симпсона число шагов четное
+    if N % 2 != 0:
+        N += 1
+    h = (b - a) / N
+    x = np.linspace(a, b, N + 1)
+    y = f(x)
+    return h / 3 * (y[0] + y[-1] + 4 * np.sum(y[1:-1:2]) + 2 * np.sum(y[2:-2:2]))
 
 # 5) Оценка порядка сходимости по Эйткену p
 def aitken(S1, S2, S3):
@@ -83,7 +101,7 @@ def table_midpoint(rtol=1e-10):
     S_vals = []
     S_rich_vals = []
 
-    N = abs(b - a)  # начальный шаг это длина отрезка [a, b]
+    N = 1
     while True:
         h = (b - a) / N  # h — длина шага
         S = midpoint_rule(f, a, b, N)  # S — приближённое значение интеграла
@@ -164,7 +182,7 @@ def table_trapezoid(rtol=1e-10):
     S_vals = []
     S_rich_vals = []
 
-    N = abs(b - a)
+    N = 1
     h = b - a
     S = h * (f(a) + f(b)) / 2  # T_1
     S_vals.append(S)
@@ -237,11 +255,9 @@ def table_simpson(rtol=1e-10):
 
     # На каждый итерации кол-во шагов удваивается
     # Для формулы Симпсона число шагов четное
-    N = abs(b - a)
-    if N % 2 != 0:
-        N *= 2
+    N = 2
 
-    h = (b - a) / N
+    h = (b - a) / N  # длина шага
 
     T_prev = (b - a) * (f(a) + f(b)) / 2  # T_1
 
@@ -316,10 +332,11 @@ def table_simpson(rtol=1e-10):
 
 # 9) Вывод таблицы
 def print_table(df, title):
-    print(f'\n{title}')
+    print("\n1.")
+    print(f"\n{title}")
 
     pd.set_option("display.float_format", "{:.12e}".format)
-    print(df)
+    print(df.to_string(index=False))  # показать целую таблицу
 
 # График R(h) в двойной логарифмической шкале
 # (зависимость log_10(R) от log_10(h)) для каждой формулы
@@ -404,14 +421,15 @@ N_used_mid, N_est_mid, Nopt_mid, E_mid = find_nopt(
 
 # Трапеции
 N_used_tr, N_est_tr, Nopt_tr, E_tr = find_nopt(
-    trapezoidal_rule, 2, trap_df, rtol, 16384, 32768, even=False
+    trapezoidal_integral, 2, trap_df, rtol, 16384, 32768, even=False
 )
 
 # Симпсон
 N_used_sim, N_est_sim, Nopt_sim, E_sim = find_nopt(
-    simpson_from_trapezoids, 4, simp_df, rtol, 64, 128, even=True
+    simpson_integral, 4, simp_df, rtol, 64, 128, even=True
 )
 
+print("\n2.")
 print("Midpoint:", N_used_mid, N_est_mid, Nopt_mid, E_mid)
 print("Trapezoid:", N_used_tr, N_est_tr, Nopt_tr, E_tr)
 print("Simpson:", N_used_sim, N_est_sim, Nopt_sim, E_sim)

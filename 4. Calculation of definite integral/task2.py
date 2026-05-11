@@ -13,109 +13,91 @@ def weight(x):
 I = np.e - 1
 rtol = 1e-10
 
-# Метод Симпсона для моментов веса
-def simpson_integral(func, A, B, n=400):
-
+# 1) Метод Симпсона для моментов веса
+def simpson_integral(func, a, b, n=400):
+    # Для формулы Симпсона число шагов четное
     if n % 2 == 1:
         n += 1
-    x = np.linspace(A, B, n + 1)
+
+    x = np.linspace(a, b, n + 1)
     y = func(x)
-    h = (B - A) / n
+    h = (b - a) / n
     return (h / 3) * (y[0] + y[-1] + 4 * np.sum(y[1:-1:2]) + 2 * np.sum(y[2:-2:2]))
 
-
 def moment_weighted(k, A, B):
-    """μ_k = ∫_A^B x^k p(x) dx"""
+    # μ_k = ∫_A^B x^k p(x) dx
     return simpson_integral(lambda x: (x**k) * weight(x), A, B, n=400)
 
 
-# ============================================================
-# 3) 3-точечная формула Ньютона–Котса на одном отрезке [A,B]
-#    Узлы: A, (A+B)/2, B
-#    Коэффициенты зависят от веса p(x)
-# ============================================================
-def nc3_local(A, B):
-    h = B - A
-    x0 = A
-    x1 = (A + B) / 2
-    x2 = B
 
-    # Базис Лагранжа на t in [0,1], x = A + h t
+# 2) Трёхточечная формула Ньютона–Котса на отрезке [a, b]
+#    Узлы: a, (a + b)/2, b
+#    Коэффициенты зависят от веса p(x)
+def nc3_local(a, b):
+    h = b - a
+    x0 = a
+    x1 = (a + b) / 2
+    x2 = b
+
+    # Базис Лагранжа на t in [0,1], x = a + h * t
     # l0(t) = 2t^2 - 3t + 1
     # l1(t) = -4t^2 + 4t
     # l2(t) = 2t^2 - t
     #
     # Весовые коэффициенты:
-    # α_i = ∫_A^B p(x) l_i((x-A)/h) dx
+    # a_i = ∫_A^B p(x) l_i((x-A)/h) dx
     #
     # Перепишем l_i через x:
-    # t = (x-A)/h
+    # t = (x - a)/h
     def l0(x):
-        t = (x - A) / h
+        t = (x - a) / h
         return 2*t*t - 3*t + 1
 
     def l1(x):
-        t = (x - A) / h
+        t = (x - a) / h
         return -4*t*t + 4*t
 
     def l2(x):
-        t = (x - A) / h
+        t = (x - a) / h
         return 2*t*t - t
 
-    a0 = simpson_integral(lambda x: weight(x) * l0(x), A, B, n=300)
-    a1 = simpson_integral(lambda x: weight(x) * l1(x), A, B, n=300)
-    a2 = simpson_integral(lambda x: weight(x) * l2(x), A, B, n=300)
+    a0 = simpson_integral(lambda x: weight(x) * l0(x), a, b, n=300)
+    a1 = simpson_integral(lambda x: weight(x) * l1(x), a, b, n=300)
+    a2 = simpson_integral(lambda x: weight(x) * l2(x), a, b, n=300)
 
     return a0 * f(x0) + a1 * f(x1) + a2 * f(x2)
 
 
+# 3) Трёхточечная формула Гаусса-Лежандра на отрезке [a, b]
 # ============================================================
-# 4) 3-точечная формула Гаусса на одном отрезке [A,B]
-#    Строится по моментам весовой функции на [A,B]
-# ============================================================
-def gauss3_local(A, B):
-    # Моменты μ_0 ... μ_6
-    mu = np.array([moment_weighted(k, A, B) for k in range(7)], dtype=float)
+def gauss3_local(a, b):
+    h = b - a
+    m = (a + b) / 2
 
-    # Ищем многочлен q(x)=x^3+c2 x^2+c1 x+c0,
-    # ортогональный 1, x, x^2 относительно веса p(x):
-    # ∫ q(x) x^m p(x) dx = 0, m=0,1,2
-    # => система по c0,c1,c2:
-    # μ_{m+3} + c2 μ_{m+2} + c1 μ_{m+1} + c0 μ_m = 0
-    M = np.array([
-        [mu[2], mu[1], mu[0]],
-        [mu[3], mu[2], mu[1]],
-        [mu[4], mu[3], mu[2]],
-    ], dtype=float)
-    rhs = -np.array([mu[3], mu[4], mu[5]], dtype=float)
+    t = np.sqrt(3 / 5) * h / 2
 
-    c2, c1, c0 = np.linalg.solve(M, rhs)
+    x1 = m - t
+    x2 = m
+    x3 = m + t
 
-    # Корни ортогонального многочлена — узлы Гаусса
-    roots = np.roots([1.0, c2, c1, c0])
-    roots = np.sort(np.real_if_close(roots).astype(float))
-
-    # Весовые коэффициенты из системы точности на 1, x, x^2
-    V = np.vstack([np.ones(3), roots, roots**2]).T
-    w = np.linalg.solve(V, mu[:3])
-
-    return np.sum(w * f(roots))
+    return (h / 2) * (
+        (5 / 9) * f(x1) +
+        (8 / 9) * f(x2) +
+        (5 / 9) * f(x3)
+    )
 
 
-# ============================================================
-# 5) Составные формулы
-# ============================================================
+# 4) Составные формулы
 def composite_nc3(N):
-    """Составная 3-точечная Ньютона–Котса."""
+    # Составная трёхточечная Ньютона–Котса
     x = np.linspace(a, b, N + 1)
     S = 0.0
     for i in range(N):
         S += nc3_local(x[i], x[i + 1])
     return S
 
-
 def composite_gauss3(N):
-    """Составная 3-точечная Гаусса."""
+    # Составная трёхточечная Гаусса
     x = np.linspace(a, b, N + 1)
     S = 0.0
     for i in range(N):
@@ -123,9 +105,7 @@ def composite_gauss3(N):
     return S
 
 
-# ============================================================
-# 6) Оценка p по Эйткену и таблица
-# ============================================================
+# 5) Оценка p по Эйткену
 def aitken_p(S1, S2, S3):
     num = abs(S3 - S2)
     den = abs(S2 - S1)
@@ -133,16 +113,19 @@ def aitken_p(S1, S2, S3):
         return np.nan
     return np.log2(den / num)
 
-
-def build_table(method, method_name, rtol, p_ref_low=None, p_ref_high=None):
+# 6) Построение таблицы
+def build_table(method, method_name, rtol, p_theory):
     rows = []
+
     S_vals = []
     Sr_vals = []
 
     N = 1
+
     while True:
         h = (b - a) / N
         S = method(N)
+
         S_vals.append(S)
 
         row = {
@@ -158,27 +141,37 @@ def build_table(method, method_name, rtol, p_ref_low=None, p_ref_high=None):
             "pr": np.nan
         }
 
+
         if len(S_vals) >= 2:
             # Для оценки Рунге используем p из предыдущей аппроксимации,
-            # если оно уже стабилизировалось.
+            # если оно уже стабилизировалось
+            #
+            # Проверка по Эйткену
             if len(S_vals) >= 3:
-                p_est = aitken_p(S_vals[-3], S_vals[-2], S_vals[-1])
+                p_est = aitken_p(
+                    S_vals[-3],
+                    S_vals[-2],
+                    S_vals[-1]
+                )
+
                 row["p"] = p_est
             else:
-                p_est = None
+                p_est = np.nan
 
-            # Если p ещё нет, берём теоретический ориентир
-            if p_est is None or np.isnan(p_est):
-                if method_name == "NC3":
-                    p_used = 3.5
-                else:
-                    p_used = 6.0
+
+            # Используем теоретический p (p_theory),
+            # пока p не стабилизуется
+            if np.isnan(p_est):
+                p_used = p_theory
             else:
                 p_used = p_est
 
             S_prev = S_vals[-2]
+
             delta = (S - S_prev) / (2**p_used - 1)
+
             R = abs(delta) / abs(S)
+
             S_rich = S + delta
 
             row["R"] = R
@@ -187,13 +180,26 @@ def build_table(method, method_name, rtol, p_ref_low=None, p_ref_high=None):
 
             Sr_vals.append(S_rich)
 
+            # p' for значений Ричардсона
             if len(Sr_vals) >= 3:
-                row["p'"] = aitken_p(Sr_vals[-3], Sr_vals[-2], Sr_vals[-1])
-
-            if len(rows) >= 1 and rows[-1]["R"] > 0 and R > 0:
-                row["pr"] = (np.log10(R) - np.log10(rows[-1]["R"])) / (
-                    np.log10(h) - np.log10(rows[-1]["h"])
+                row["p'"] = aitken_p(
+                    Sr_vals[-3],
+                    Sr_vals[-2],
+                    Sr_vals[-1]
                 )
+
+            # Наклон pr
+            if len(rows) >= 1:
+
+                R_prev = rows[-1]["R"]
+                h_prev = rows[-1]["h"]
+
+                if (
+                    not np.isnan(R_prev)
+                    and R_prev > 0
+                    and R > 0
+                ):
+                    row["pr"] = (np.log10(R) - np.log10(R_prev)) / (np.log10(h) - np.log10(h_prev))
 
         rows.append(row)
 
@@ -205,22 +211,16 @@ def build_table(method, method_name, rtol, p_ref_low=None, p_ref_high=None):
 
     df = pd.DataFrame(rows)
 
-    print("\n" + "=" * 90)
-    print(method_name)
-    print("=" * 90)
+    print(f"\n{method_name}")
 
-    out = df.copy().replace({np.nan: ""})
-    pd.set_option("display.max_columns", None)
-    pd.set_option("display.width", 220)
     pd.set_option("display.float_format", "{:.12e}".format)
-    print(out.to_string(index=False))
+
+    print(df.to_string(index=False))
 
     return df
 
 
-# ============================================================
 # 7) График log10(R) от log10(h)
-# ============================================================
 def plot_R(df, title, slope1, slope2=None):
     d = df.dropna(subset=["R", "h"]).copy()
     h = d["h"].to_numpy()
@@ -232,7 +232,7 @@ def plot_R(df, title, slope1, slope2=None):
     plt.figure(figsize=(7, 5))
     plt.plot(x, y, "o-", label="log10(R)")
 
-    # опорная прямая со slope1
+    # Опорная прямая со наклоном slope1
     c1 = np.median(R / (h ** slope1))
     h_line = np.array([h.min(), h.max()])
     plt.plot(np.log10(h_line), np.log10(c1 * h_line**slope1),
@@ -251,9 +251,7 @@ def plot_R(df, title, slope1, slope2=None):
     plt.show()
 
 
-# ============================================================
 # 8) Подбор Nopt и проверка точности
-# ============================================================
 def find_nopt(method, df, p_min, p_max, is_gauss=False):
     # Берём первую строку, где p попал в требуемый диапазон
     good = df[(df["p"].notna()) & (df["p"] > p_min) & (df["p"] < p_max)].copy()
@@ -265,13 +263,13 @@ def find_nopt(method, df, p_min, p_max, is_gauss=False):
     R0 = float(row["R"])
     p0 = float(row["p"])
 
-    # оценка Nopt по Рунге
+    # Оценка Nopt по Рунге
     N_est = int(np.ceil(N0 * (R0 / rtol) ** (1.0 / p0)))
 
-    # для симметричных формул N должен быть кратен 2, но здесь N — число отрезков,
+    # Для симметричных формул N должен быть кратен 2, но здесь N — число отрезков,
     # а в нашем построении каждый отрезок считается отдельно, так что ограничение не нужно
 
-    # увеличиваем, пока точная погрешность не станет достаточной
+    # Увеличиваем, пока точная погрешность не станет достаточной
     N = max(N_est, N0 + 1)
     while True:
         S = method(N)
@@ -287,11 +285,20 @@ def find_nopt(method, df, p_min, p_max, is_gauss=False):
         N += 1
 
 
-# ============================================================
-# 9) Запуск
-# ============================================================
-nc_df = build_table(composite_nc3, "NC3", rtol)
-gauss_df = build_table(composite_gauss3, "Gauss3", rtol)
+# 9)
+nc_df = build_table(
+    composite_nc3,
+    "NC3",
+    rtol,
+    p_theory=4
+)
+
+gauss_df = build_table(
+    composite_gauss3,
+    "Gauss3",
+    rtol,
+    p_theory=6
+)
 
 # Графики
 plot_R(nc_df, "Newton-Cotes 3-point: log10(R) vs log10(h)", 3, 4)
