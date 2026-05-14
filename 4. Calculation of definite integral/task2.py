@@ -2,15 +2,21 @@ import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 
-a, b = 0.0, 1.0
+a, b = 1.5, 3.3
+I = 7.25800298437456290561  # точное значение интеграла
 
 def f(x):
-    return np.exp(x)
+    # f(x) = 2 cos(2.5x) exp(x/3) + 4 sin(3.5x) exp(−3x) + x
+    return 2 * np.cos(2.5 * x) * np.exp(x / 3) + 4 * np.sin(3.5 * x) * np.exp(-3 * x) + x
 
+alpha = 1/3
+beta = 0
 def weight(x):
-    return np.ones_like(x, dtype=float)
+    # p(x) = (x-a)^{-alpha} * (b-x)^{-beta}
+    # Используем небольшое смещение eps, чтобы избежать деления на 0 в точке x = a (или x = b)
+    eps = 1e-14
+    return (x - a + eps)**(-alpha) * (b - x + eps)**(-beta)
 
-I = np.e - 1
 rtol = 1e-10
 
 # 1) Метод Симпсона для моментов веса

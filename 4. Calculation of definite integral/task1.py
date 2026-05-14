@@ -32,13 +32,13 @@ import matplotlib.pyplot as plt
 
 
 # 1) Найдем точное значение интеграла I
-a, b = 0.0, 1.0
+a, b = 1.5, 3.3
+I = 7.25800298437456290561  # точное значение интеграла
 
 def f(x):
-    return np.exp(x)  # e^x
+    # f(x) = 2 cos(2.5x) exp(x/3) + 4 sin(3.5x) exp(−3x) + x
+    return 2 * np.cos(2.5 * x) * np.exp(x / 3) + 4 * np.sin(3.5 * x) * np.exp(-3 * x) + x
 
-# e^x dx, [0, 1] = e - 1
-I = np.e - 1
 rtol = 1e-10
 
 # 2) Составная формула среднего прямоугольника
